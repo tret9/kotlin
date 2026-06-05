@@ -9,7 +9,8 @@ pluginManagement {
                 includeGroupByRegex("org\\.jetbrains\\.intellij\\.deps(\\..+)?")
             }
         }
-        maven { url "https://redirector.kotlinlang.org/maven/kotlin-dependencies" }
+        mavenLocal()
+        maven { url "https://packages.jetbrains.team/maven/p/kt/kotlin-dependencies" }
         google { url "https://cache-redirector.jetbrains.com/dl.google.com/dl/android/maven2" }
         mavenCentral { url "https://cache-redirector.jetbrains.com/maven-central" }
         gradlePluginPortal()
