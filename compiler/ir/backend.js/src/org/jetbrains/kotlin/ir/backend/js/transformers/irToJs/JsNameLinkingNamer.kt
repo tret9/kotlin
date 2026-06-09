@@ -154,7 +154,7 @@ class JsNameLinkingNamer(
     private fun IrClass.fieldData(): Map<IrField, String> {
         return context.fieldDataCache.getOrPut(this) {
             val allClasses = DFS.topologicalOrder(listOf(this)) { node ->
-                node.superTypes.mapNotNull {
+                node.superTypes.sortedBy { it.safeAs<IrSimpleType>()?.classifier?.signature?.render(IdSignatureRenderer.LEGACY) ?: "" }.mapNotNull {
                     it.safeAs<IrSimpleType>()?.classifier.safeAs<IrClassSymbol>()?.owner
                 }
             }

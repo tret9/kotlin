@@ -7,7 +7,9 @@ package org.jetbrains.kotlin.ir.backend.js.transformers.irToJs
 
 import org.jetbrains.kotlin.ir.backend.js.utils.JsMainFunctionDetector
 import org.jetbrains.kotlin.ir.backend.js.utils.emptyScope
+import org.jetbrains.kotlin.js.backend.JsToStringGenerationVisitor
 import org.jetbrains.kotlin.js.backend.ast.*
+import org.jetbrains.kotlin.js.util.TextOutputImpl
 import org.jetbrains.kotlin.serialization.js.ModuleKind
 import org.jetbrains.kotlin.utils.DFS
 import org.jetbrains.kotlin.utils.addToStdlib.partitionIsInstance
@@ -216,6 +218,9 @@ class Merger(
         fragments.forEach { fragment ->
             moduleBody += fragment.declarations.statements.sortedBy { it::class.java.name }
             classModels += fragment.classes
+//            fragment.classes.entries.sortedBy { it.key.ident }.forEach { (name, model) ->
+//                classModels[name] = model
+//            }
             initializerBlock.statements += fragment.initializers.statements
             eagerInitializerBlock.statements += fragment.eagerInitializers.statements
             polyfillDeclarationBlock.statements += fragment.polyfills.statements
@@ -281,7 +286,6 @@ class Merger(
         return program
     }
 
-
     private fun processClassModels(
         classModelMap: Map<JsName, JsIrIcClassModel>,
         preDeclarationBlock: JsBlock,
@@ -299,7 +303,7 @@ class Merger(
 
         DFS.dfs(
             classModelMap.keys.sortedBy { it.ident },
-            { classModelMap[it]?.superClasses ?: emptyList() },
+            { classModelMap[it]?.superClasses?.sortedBy { it.ident } ?: emptyList() },
             declarationHandler
         )
     }
