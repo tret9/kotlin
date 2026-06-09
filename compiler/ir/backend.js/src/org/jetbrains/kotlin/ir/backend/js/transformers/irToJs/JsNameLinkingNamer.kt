@@ -187,10 +187,9 @@ class JsNameLinkingNamer(
                         }
                 }
             }
+            val nameCnt = hashMapOf<String, Int>()
 
             allClasses.reversed().forEach { irClass ->
-                val nameCnt = hashMapOf<String, Int>()
-
                 irClass.declarations
                     .sortedBy { it.symbol.signature?.render(IdSignatureRenderer.LEGACY) ?: "" }
                     .filterIsInstance<IrFunction>().filter { it.dispatchReceiverParameter != null }
@@ -208,8 +207,11 @@ class JsNameLinkingNamer(
                                 correspondingProperty.isSimpleProperty
                         val safeName = when {
                             hasStableName -> (correspondingProperty ?: declaration).getJsNameOrKotlinName().identifier
-                            minimizedMemberNames && !context.keeper.shouldKeep(declaration) ->
-                                context.minimizedNameGenerator.generateNextName(declaration.getJsNameOrKotlinName().identifier)
+                            minimizedMemberNames && !context.keeper.shouldKeep(declaration) -> {
+                                val seed = declaration.fqNameWhenAvailable?.asString()
+                                    ?: (irClass.name.identifier + "::" + declaration.getJsNameOrKotlinName().identifier)
+                                context.minimizedNameGenerator.generateNextName(seed)
+                            }
                             else -> declaration.safeName()
                         }
                         val resultName = if (!hasStableName) {
