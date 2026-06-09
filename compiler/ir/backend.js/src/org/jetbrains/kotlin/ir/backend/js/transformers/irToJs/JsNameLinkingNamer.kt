@@ -153,8 +153,6 @@ class JsNameLinkingNamer(
 
     private fun IrClass.fieldData(): Map<IrField, String> {
         return context.fieldDataCache.getOrPut(this) {
-            val nameCnt = hashMapOf<String, Int>()
-
             val allClasses = DFS.topologicalOrder(listOf(this)) { node ->
                 node.superTypes.mapNotNull {
                     it.safeAs<IrSimpleType>()?.classifier.safeAs<IrClassSymbol>()?.owner
@@ -164,60 +162,63 @@ class JsNameLinkingNamer(
             val result = hashMapOf<IrField, String>()
 
             if (minimizedMemberNames) {
-                allClasses.reversed().forEach {
-                    it.declarations.forEach { declaration ->
-                        when {
-                            declaration is IrFunction && declaration.dispatchReceiverParameter != null -> {
-                                val property = (declaration as? IrSimpleFunction)?.correspondingPropertySymbol?.owner
-                                if (property?.isExported(context) == true || property?.isEffectivelyExternal() == true) {
-                                    context.minimizedNameGenerator.reserveName(property.getJsNameOrKotlinName().identifier)
+                allClasses.reversed().forEach { irClass ->
+                    irClass.declarations
+                        .sortedBy { it.symbol.signature?.render(IdSignatureRenderer.LEGACY) ?: "" }
+                        .forEach { declaration ->
+                            when {
+                                declaration is IrFunction && declaration.dispatchReceiverParameter != null -> {
+                                    val property = (declaration as? IrSimpleFunction)?.correspondingPropertySymbol?.owner
+                                    if (property?.isExported(context) == true || property?.isEffectivelyExternal() == true) {
+                                        context.minimizedNameGenerator.reserveName(property.getJsNameOrKotlinName().identifier)
+                                    }
+                                    if (declaration.hasStableJsName(context)) {
+                                        val signature = jsFunctionSignature(declaration, context)
+                                        context.minimizedNameGenerator.reserveName(signature)
+                                    }
                                 }
-                                if (declaration.hasStableJsName(context)) {
-                                    val signature = jsFunctionSignature(declaration, context)
-                                    context.minimizedNameGenerator.reserveName(signature)
-                                }
-                            }
 
-                            declaration is IrProperty -> {
-                                if (declaration.isExported(context)) {
-                                    context.minimizedNameGenerator.reserveName(declaration.getJsNameOrKotlinName().identifier)
+                                declaration is IrProperty -> {
+                                    if (declaration.isExported(context)) {
+                                        context.minimizedNameGenerator.reserveName(declaration.getJsNameOrKotlinName().identifier)
+                                    }
                                 }
                             }
                         }
-                    }
                 }
             }
 
-            allClasses.reversed().forEach {
-                it.declarations.forEach {
-                    when {
-                        it is IrField -> {
-                            val correspondingProperty = it.correspondingPropertySymbol?.owner
-                            val hasStableName = correspondingProperty != null &&
-                                    correspondingProperty.visibility.isPublicAPI &&
-                                    (correspondingProperty.isExported(context) || correspondingProperty.getJsName() != null) &&
-                                    correspondingProperty.isSimpleProperty
-                            val safeName = when {
-                                hasStableName -> (correspondingProperty ?: it).getJsNameOrKotlinName().identifier
-                                minimizedMemberNames && !context.keeper.shouldKeep(it) ->
-                                    context.minimizedNameGenerator.generateNextName(it.getJsNameOrKotlinName().identifier)
-                                else -> it.safeName()
-                            }
-                            val resultName = if (!hasStableName) {
-                                val suffix = nameCnt.getOrDefault(safeName, 0) + 1
-                                nameCnt[safeName] = suffix
-                                safeName + "_$suffix"
-                            } else safeName
-                            result[it] = resultName
-                        }
+            allClasses.reversed().forEach { irClass ->
+                val nameCnt = hashMapOf<String, Int>()
 
-                        it is IrFunction && it.dispatchReceiverParameter != null -> {
-                            val signature = jsFunctionSignature(it, context)
-                            require(signature !in nameCnt)
-                            nameCnt[signature] = 1 // avoid clashes with member functions
-                        }
+                irClass.declarations
+                    .sortedBy { it.symbol.signature?.render(IdSignatureRenderer.LEGACY) ?: "" }
+                    .filterIsInstance<IrFunction>().filter { it.dispatchReceiverParameter != null }
+                    .forEach { declaration ->
+                        val signature = jsFunctionSignature(declaration, context)
+                        nameCnt[signature] = 1 // avoid clashes with member functions
                     }
-                }
+                irClass.declarations
+                    .sortedBy { it.symbol.signature?.render(IdSignatureRenderer.LEGACY) ?: "" }
+                    .filterIsInstance<IrField>().forEach { declaration ->
+                        val correspondingProperty = declaration.correspondingPropertySymbol?.owner
+                        val hasStableName = correspondingProperty != null &&
+                                correspondingProperty.visibility.isPublicAPI &&
+                                (correspondingProperty.isExported(context) || correspondingProperty.getJsName() != null) &&
+                                correspondingProperty.isSimpleProperty
+                        val safeName = when {
+                            hasStableName -> (correspondingProperty ?: declaration).getJsNameOrKotlinName().identifier
+                            minimizedMemberNames && !context.keeper.shouldKeep(declaration) ->
+                                context.minimizedNameGenerator.generateNextName(declaration.getJsNameOrKotlinName().identifier)
+                            else -> declaration.safeName()
+                        }
+                        val resultName = if (!hasStableName) {
+                            val suffix = nameCnt.getOrDefault(safeName, 0) + 1
+                            nameCnt[safeName] = suffix
+                            safeName + "_$suffix"
+                        } else safeName
+                        result[declaration] = resultName
+                    }
             }
 
             result
